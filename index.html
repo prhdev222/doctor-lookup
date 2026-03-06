@@ -517,10 +517,15 @@ function parseCSV(text) {
 }
 
 async function fetchCSV(sheetId, gid) {
-  let url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-  if (gid) url += `&gid=${gid}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('ไม่สามารถอ่าน Sheet ได้');
+  const res = await fetch('/api/sheet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sheetId, gid: gid || '' }),
+  });
+  if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || 'ไม่สามารถอ่าน Sheet ได้');
+  }
   return await res.text();
 }
 
