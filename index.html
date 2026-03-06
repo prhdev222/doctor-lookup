@@ -517,6 +517,13 @@ function parseCSV(text) {
 }
 
 async function fetchCSV(sheetId, gid) {
+  const directUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gid ? '&gid=' + gid : ''}`;
+  // ลองดึงจากเบราว์เซอร์โดยตรงก่อน (เหมือน sheet_read บน GitHub Pages) — ใช้ได้เมื่อ Sheet แชร์ "Anyone with the link"
+  try {
+    const direct = await fetch(directUrl);
+    if (direct.ok) return await direct.text();
+  } catch (_) { /* CORS หรือ network ผิดพลาด → ใช้ proxy ด้านล่าง */ }
+  // Fallback: ผ่าน API (สำหรับเมื่อ CORS บล็อก หรือใช้ Service Account สำหรับ Sheet ส่วนตัว)
   const res = await fetch('/api/sheet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
