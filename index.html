@@ -518,12 +518,24 @@ function parseCSV(text) {
 
 async function fetchCSV(sheetId, gid) {
   const directUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gid ? '&gid=' + gid : ''}`;
-  // ลองดึงจากเบราว์เซอร์โดยตรงก่อน (เหมือน sheet_read บน GitHub Pages) — ใช้ได้เมื่อ Sheet แชร์ "Anyone with the link"
+
+  // 1) ลองดึงจากเบราว์เซอร์โดยตรง (ใช้ได้บน GitHub Pages / บางโดเมน)
   try {
     const direct = await fetch(directUrl);
     if (direct.ok) return await direct.text();
-  } catch (_) { /* CORS หรือ network ผิดพลาด → ใช้ proxy ด้านล่าง */ }
-  // Fallback: ผ่าน API (สำหรับเมื่อ CORS บล็อก หรือใช้ Service Account สำหรับ Sheet ส่วนตัว)
+  } catch (_) { }
+
+  // 2) ลองผ่าน CORS proxy (เมื่อ Sheet แชร์ "Anyone with the link" แต่โดเมนเราโดน CORS บล็อก)
+  try {
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl);
+    const proxy = await fetch(proxyUrl);
+    if (proxy.ok) {
+      const text = await proxy.text();
+      if (text && !text.startsWith('{"message"')) return text; // allorigins ผิดพลาดจะคืน JSON
+    }
+  } catch (_) { }
+
+  // 3) Fallback: ผ่าน API ของเรา (ต้องตั้ง Service Account ใน Vercel ถ้า Sheet ไม่ได้แชร์สาธารณะ)
   const res = await fetch('/api/sheet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
