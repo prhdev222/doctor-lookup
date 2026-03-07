@@ -331,6 +331,15 @@
             </div>
           </div>
           <div id="selectorError" class="error-box" style="display:none"></div>
+          <div class="manual-connect" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+            <div class="section-label" style="margin-bottom:10px"><span>🔗</span><span>หรือใส่ลิงก์ Sheet เอง</span></div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">สำหรับ Sheet ของคนอื่นที่แชร์ "Anyone with the link" — ไม่ต้อง add email</p>
+            <div class="form-row" style="margin-bottom:8px">
+              <input id="manualSheetUrl" class="search-input" placeholder="วาง URL ของ Google Sheet (หรือ Sheet ID)" style="padding:12px 16px">
+            </div>
+            <button type="button" class="btn-pin" style="padding:10px 24px;font-size:14px" onclick="loadSheetByUrl()">โหลด Sheet นี้</button>
+            <div id="manualError" class="error-box" style="display:none;margin-top:10px"></div>
+          </div>
         </div>
       </div>
 
@@ -627,6 +636,38 @@ async function loadSheet(idx) {
   } catch (e) {
     alert('⚠️ ' + e.message);
     if (cards[idx]) { cards[idx].style.opacity = '1'; cards[idx].style.pointerEvents = 'auto'; }
+  }
+}
+
+async function loadSheetByUrl() {
+  const input = document.getElementById('manualSheetUrl');
+  const errEl = document.getElementById('manualError');
+  const raw = (input.value || '').trim();
+  errEl.style.display = 'none';
+  if (!raw) { errEl.textContent = 'กรุณาวาง URL หรือ Sheet ID'; errEl.style.display = 'block'; return; }
+  const sheetId = isValidSheetId(raw);
+  if (!sheetId) { errEl.textContent = 'URL หรือ Sheet ID ไม่ถูกต้อง'; errEl.style.display = 'block'; return; }
+  const gidMatch = raw.match(/[#&]gid=(\d+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+  errEl.textContent = 'กำลังโหลด...'; errEl.style.display = 'block';
+  try {
+    const text = await fetchCSV(sheetId, gid);
+    const allRows = parseCSV(text);
+    if (allRows.length < 2) throw new Error('Sheet ว่างเปล่า');
+    headers = allRows[0];
+    data = allRows.slice(1).filter(r => r.some(c => c !== ''));
+    const cc = headers.length;
+    data = data.map(r => { while (r.length < cc) r.push(''); return r.slice(0, cc); });
+    document.getElementById('selectorPanel').style.display = 'none';
+    document.getElementById('searchPanel').style.display = 'block';
+    document.getElementById('countBadge').textContent = data.length + ' รายการ';
+    document.getElementById('currentSheetName').textContent = 'Sheet ที่ใส่ลิงก์';
+    document.getElementById('searchInput').focus();
+    selectedIdx = null;
+    renderResults(data);
+    errEl.style.display = 'none';
+  } catch (e) {
+    errEl.textContent = '⚠️ ' + e.message; errEl.style.display = 'block';
   }
 }
 
