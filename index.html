@@ -517,7 +517,9 @@ function parseCSV(text) {
 }
 
 async function fetchCSV(sheetId, gid) {
-  const directUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gid ? '&gid=' + gid : ''}`;
+  const cleanId = isValidSheetId(sheetId);
+  if (!cleanId) throw new Error('Sheet ID ไม่ถูกต้อง');
+  const directUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/export?format=csv${gid ? '&gid=' + gid : ''}`;
 
   // 1) ลองดึงจากเบราว์เซอร์โดยตรง (ใช้ได้บน GitHub Pages / บางโดเมน)
   try {
@@ -539,7 +541,7 @@ async function fetchCSV(sheetId, gid) {
   const res = await fetch('/api/sheet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sheetId, gid: gid || '' }),
+    body: JSON.stringify({ sheetId: cleanId, gid: gid || '' }),
   });
   if (!res.ok) {
     const msg = await res.text();
@@ -549,6 +551,15 @@ async function fetchCSV(sheetId, gid) {
 }
 
 // ── Load Config ──
+function isValidSheetId(s) {
+  if (!s || typeof s !== 'string') return false;
+  const t = s.trim();
+  const urlMatch = t.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (urlMatch) return urlMatch[1];
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(t)) return t;
+  return false;
+}
+
 async function loadConfig() {
   const listEl = document.getElementById('sheetList');
   const errEl = document.getElementById('selectorError');
@@ -560,16 +571,23 @@ async function loadConfig() {
 
     const ch = allRows[0].map(h => h.toLowerCase().trim());
     const nameIdx = Math.max(ch.findIndex(h => h.includes('ชื่อ') || h.includes('หัวข้อ') || h.includes('name') || h.includes('title')), 0);
-    const idIdx = Math.max(ch.findIndex(h => h.includes('sheet_id') || h.includes('id')), 1);
+    const idIdx = Math.max(
+      ch.findIndex(h => h.includes('sheet_id') || h.includes('spreadsheet')),
+      ch.findIndex(h => h === 'id' || h.includes('link')),
+      1
+    );
     const gidIdx = ch.findIndex(h => h.includes('gid'));
     const descIdx = ch.findIndex(h => h.includes('desc') || h.includes('หมายเหตุ') || h.includes('รายละเอียด'));
 
-    sheetEntries = allRows.slice(1).filter(r => r[idIdx] && r[idIdx].trim()).map((r, i) => ({
-      name: r[nameIdx] || 'Sheet ' + (i+1), sheetId: r[idIdx].trim(),
-      gid: gidIdx >= 0 ? (r[gidIdx]||'').trim() : '',
-      desc: descIdx >= 0 ? (r[descIdx]||'').trim() : '',
-    }));
-    if (!sheetEntries.length) throw new Error('ไม่พบรายชื่อ Sheet');
+    const rawEntries = allRows.slice(1)
+      .map((r, i) => ({ name: r[nameIdx] || 'Sheet ' + (i+1), rawId: (r[idIdx]||'').trim(), gid: gidIdx >= 0 ? (r[gidIdx]||'').trim() : '', desc: descIdx >= 0 ? (r[descIdx]||'').trim() : '' }))
+      .filter(e => e.rawId);
+    sheetEntries = [];
+    for (const e of rawEntries) {
+      const sheetId = isValidSheetId(e.rawId);
+      if (sheetId) sheetEntries.push({ name: e.name, sheetId, gid: e.gid, desc: e.desc });
+    }
+    if (!sheetEntries.length) throw new Error('ไม่พบรายชื่อ Sheet ที่มี Sheet ID ถูกต้อง (ต้องเป็น ID ยาวๆ หรือ URL ของ Google Sheet)');
 
     let html = '';
     sheetEntries.forEach((e, i) => {
