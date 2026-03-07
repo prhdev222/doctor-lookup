@@ -56,10 +56,20 @@ export default async function handler(req, res) {
 
   try {
     // 1) ลองใช้ Service Account (Sheet ไม่ต้องแชร์สาธารณะ)
-    const csvFromApi = await fetchViaSheetsAPI(sheetId, gid);
-    if (csvFromApi !== null) {
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      return res.status(200).send(csvFromApi);
+    try {
+      const csvFromApi = await fetchViaSheetsAPI(sheetId, gid);
+      if (csvFromApi !== null) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.status(200).send(csvFromApi);
+      }
+    } catch (apiErr) {
+      const msg = (apiErr.message || '').toLowerCase();
+      if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('does not have permission') || msg.includes('caller')) {
+        return res.status(403).send(
+          'Service Account ไม่มีสิทธิ์อ่าน Sheet นี้ — กรุณาเปิด Google Sheet นั้น → กด Share → เพิ่มอีเมลจากไฟล์ JSON (ฟิลด์ client_email เช่น xxx@xxx.iam.gserviceaccount.com) เป็น Viewer → Save'
+        );
+      }
+      throw apiErr;
     }
 
     // 2) Fallback: ใช้ export CSV (ต้องแชร์เป็น "Anyone with the link can view")
@@ -69,9 +79,12 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
-      const hint = response.status === 403
-        ? 'แชร์ Sheet เป็น "Anyone with the link can view" หรือตั้งค่า Service Account ตาม README'
-        : 'ตรวจสอบว่า Sheet ID ถูกต้องและมีการแชร์ที่เหมาะสม';
+      const is401 = response.status === 401;
+      const hint = is401
+        ? 'Sheet นี้เป็นแบบส่วนตัว — เลือกอย่างใดอย่างหนึ่ง: (1) ตั้ง GOOGLE_SERVICE_ACCOUNT_JSON ใน Vercel แล้วแชร์ Sheet กับอีเมล client_email ใน JSON เป็น Viewer หรือ (2) แชร์ Sheet เป็น "Anyone with the link can view"'
+        : response.status === 403
+          ? 'แชร์ Sheet เป็น "Anyone with the link can view" หรือใช้ Service Account ตาม README'
+          : 'ตรวจสอบว่า Sheet ID ถูกต้องและมีการแชร์ที่เหมาะสม';
       return res.status(response.status).send(`ไม่สามารถอ่าน Sheet ได้ (${response.status}). ${hint}`);
     }
 
