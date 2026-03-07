@@ -65,9 +65,12 @@ export default async function handler(req, res) {
     } catch (apiErr) {
       const msg = (apiErr.message || '').toLowerCase();
       if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('does not have permission') || msg.includes('caller')) {
-        return res.status(403).send(
-          'Service Account ไม่มีสิทธิ์อ่าน Sheet นี้ — กรุณาเปิด Google Sheet นั้น → กด Share → เพิ่มอีเมลจากไฟล์ JSON (ฟิลด์ client_email เช่น xxx@xxx.iam.gserviceaccount.com) เป็น Viewer → Save'
-        );
+        let hint = 'กรุณาเปิด Google Sheet นั้น → Share → เพิ่มอีเมลด้านล่างเป็น Viewer → Save';
+        try {
+          const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
+          if (creds.client_email) hint += '\n\nอีเมลที่แอปใช้อยู่: ' + creds.client_email;
+        } catch (_) { }
+        return res.status(403).send(hint);
       }
       throw apiErr;
     }
